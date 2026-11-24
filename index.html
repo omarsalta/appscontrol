@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de vehículos · Amsterdam Salud</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: práctico, de oficina comercial; una libreta de viajes que se usa todos los días
+   IDEA: el tablero del auto + la planilla de pedidos de vehículo con firma de autorización
+   PICTURE: tablero con estado del vehículo, pedidos por autorizar, afiliaciones y alertas de carnet
+   COLOUR and TYPE: asfalto, blanco, amarillo de señal vial; Barlow Condensed + Inter
+   LAYOUT: tablero arriba, pestañas: viajes, pedir vehículo, vendedores, resumen */
+:root{color-scheme:light dark;
+--bg:light-dark(#f4f4f1,#121417);--card:light-dark(#ffffff,#1b1e23);--ink:light-dark(#15171a,#eef0f2);
+--mute:light-dark(#5d636b,#9aa1aa);--line:light-dark(#dcdcd6,#2c3038);--asf:#1c1f24;--yel:#f5b700;
+--red:light-dark(#b42318,#ff7a6b);--grn:light-dark(#0f7b45,#4cd38a);--org:light-dark(#a35200,#ffb35c)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3,.big{font-family:"Barlow Condensed",Inter,sans-serif}
+.band{padding:clamp(20px,3.5vw,48px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+.dash{background:var(--asf);color:#fff;background-image:repeating-linear-gradient(90deg,transparent 0 60px,var(--yel) 60px 100px);background-size:100% 6px;background-repeat:no-repeat;background-position:bottom}
+.dash h1{font-size:clamp(32px,5vw,48px);line-height:1.05;margin:0 0 4px;font-weight:700}
+.dash .sub{color:#b9bec6;margin:0 0 20px}
+.panel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.gauge{background:#262a31;border-radius:14px;padding:16px 18px;border:1px solid #333842}
+.gauge .lbl{color:#b9bec6;font-size:14px}
+.big{font-size:clamp(32px,4.5vw,48px);font-weight:600;line-height:1.1;margin-top:6px}
+.gauge .det{font-size:14px;color:#d8dbe0}
+.gauge.warn{border-color:var(--yel)}
+nav.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-top:22px}
+nav.tabs a{color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px 8px 0 0;font-weight:600;background:#262a31;min-height:44px;display:flex;align-items:center;gap:6px}
+nav.tabs a.on{background:var(--yel);color:#1c1f24}
+.badge{background:var(--red);color:#fff;border-radius:99px;font-size:12px;padding:0 7px;line-height:20px}
+h2{font-size:30px;line-height:1.05;margin:0 0 14px;font-weight:600}
+h3{font-size:22px;margin:18px 0 8px;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:clamp(16px,2.5vw,24px);margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{display:block;font-size:14px;color:var(--mute);font-weight:500}
+input,select,textarea{display:block;width:100%;margin-top:4px;font:16px Inter,system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;min-height:44px}
+textarea{min-height:60px;resize:vertical}
+input[type=checkbox]{display:inline-block;width:20px;height:20px;min-height:0;margin:0 8px 0 0;vertical-align:middle}
+.chk{display:inline-flex;align-items:center;color:var(--ink);font-size:15px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;min-height:44px}
+.chk.dis{opacity:.5}
+.chks{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+:focus-visible{outline:3px solid var(--yel);outline-offset:1px}
+.full{grid-column:1/-1}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
+button{font:600 15px Inter,system-ui,sans-serif;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button.pri{background:var(--yel);border-color:var(--yel);color:#1c1f24}
+button.ok{background:var(--grn);border-color:var(--grn);color:#fff}
+button.sm{min-height:38px;padding:0 12px;font-size:14px}
+button.del{color:var(--red)}
+button:disabled{opacity:.5;cursor:default}
+.msg{font-size:14px;color:var(--mute)}.msg.err{color:var(--red)}.msg.wrn{color:var(--org)}
+.visita{border:1px dashed var(--line);border-radius:10px;padding:12px;margin-top:10px}
+.trip{border:1px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--card)}
+.trip.pendiente{border-left-color:var(--org)}.trip.autorizado{border-left-color:var(--grn)}.trip.enruta{border-left-color:var(--yel)}
+.trip.rechazado,.trip.cancelado{opacity:.7}
+.trip .hd{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
+.trip .hd strong{font-family:"Barlow Condensed";font-size:22px;font-weight:600}
+.trip ul{margin:6px 0 0;padding-left:20px}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--line);color:var(--ink)}
+.t-ok{background:var(--grn);color:#fff}.t-wrn{background:var(--yel);color:#1c1f24}.t-bad{background:var(--red);color:#fff}
+.meta{font-size:14px;color:var(--mute)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--mute);border-bottom:2px solid var(--line);padding:8px 6px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:8px 6px;vertical-align:top}
+td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.empty{padding:24px 8px;text-align:center;color:var(--mute)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.kpis div{border:1px solid var(--line);border-radius:10px;padding:12px}
+.kpis b{display:block;font-family:"Barlow Condensed";font-size:32px;font-weight:600;line-height:1.1}
+.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:14px}
+.filters label{width:200px}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+.dlg.on{display:flex}.dlg .card{max-width:680px;width:100%;max-height:92vh;overflow:auto;margin:0}
+[hidden]{display:none!important}
+.th{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle;margin:2px}
+.cklist{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px;margin:10px 0}
+.ck{border-top:1px solid var(--line);margin-top:8px;padding-top:8px;font-size:14px}
+.ck b{font-weight:600}
+a{color:inherit}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--asf);background-image:repeating-linear-gradient(90deg,transparent 0 60px,var(--yel) 60px 100px);background-size:100% 6px;background-repeat:no-repeat;background-position:bottom}
+.login .card{max-width:420px;width:100%}
+.login[hidden]{display:none}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:8px 16px}
+.usr{color:#d8dbe0;font-size:14px;display:flex;align-items:center;gap:8px}
+.usr button{background:#262a31;color:#fff;border-color:#333842}
+@media(max-width:900px){.panel{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;color:var(--mute)}.stack td:empty{display:none}.filters label{width:100%}nav.tabs a{padding:8px 12px}}
+@media(prefers-reduced-motion:no-preference){.trip{transition:box-shadow .2s}.trip:hover{box-shadow:0 4px 14px rgba(0,0,0,.08)}}
+</style><script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script></head>
+<body>
+<div id="login" class="login"><div class="card">
+  <h1 style="font-size:36px;margin:0 0 4px">Control de vehículos</h1><p class="meta" style="margin:0 0 16px">Amsterdam Salud</p>
+  <form id="fl">
+    <label>Mail<input id="lMail" type="email" autocomplete="username" required></label>
+    <label id="lPassW" style="margin-top:10px">Contraseña<input id="lPass" type="password" autocomplete="current-password" minlength="6"></label>
+    <label id="lPass2W" style="margin-top:10px" hidden>Repetí la contraseña<input id="lPass2" type="password" autocomplete="new-password" minlength="6"></label>
+    <div class="row"><button class="pri" type="submit" id="lBtn">Ingresar</button></div>
+    <p class="msg" id="lMsg"></p>
+    <p class="meta" id="lLinks"><a href="#" id="lOlv">Olvidé mi contraseña</a></p>
+  </form>
+</div></div>
+
+<header class="band dash" style="padding-bottom:0" id="app" hidden><div class="wrap">
+  <div class="top"><h1>Control de vehículos · Amsterdam Salud</h1><div class="usr"><span id="usr"></span> <button class="sm" id="cambiar" type="button">Cambiar contraseña</button> <button class="sm" id="salir" type="button">Salir</button></div></div>
+  <p class="sub" id="estado">Conectando…</p>
+  <div class="panel">
+    <div class="gauge" id="gVeh"><div class="lbl">Vehículo <span id="gPat"></span></div><div class="big" id="gVehE">—</div><div class="det" id="gVehD"></div></div>
+    <div class="gauge" id="gPen"><div class="lbl">Pedidos por autorizar</div><div class="big" id="gPenN">0</div><div class="det" id="gPenD"></div></div>
+    <div class="gauge"><div class="lbl">Afiliaciones concretadas este mes</div><div class="big" id="gAfi">0</div><div class="det" id="gAfiD"></div></div>
+    <div class="gauge" id="gCar"><div class="lbl">Alertas (vehículo y carnets)</div><div class="big" id="gCarN">0</div><div class="det" id="gCarD"></div></div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <a href="#viajes" data-t="viajes">Viajes</a>
+    <a href="#autorizar" data-t="autorizar">Autorizaciones <span class="badge" id="bPen" hidden></span></a>
+    <a href="#checklist" data-t="checklist">Checklist <span class="badge" id="bChk" hidden></span></a>
+    <a href="#pedir" data-t="pedir">Pedir vehículo</a>
+    <a href="#vendedores" data-t="vendedores">Vendedores</a>
+    <a href="#vehiculo" data-t="vehiculo">Vehículo</a>
+    <a href="#usuarios" data-t="usuarios" id="tabUsr" hidden>Usuarios</a>
+    <a href="#resumen" data-t="resumen">Resumen</a>
+  </nav>
+</div></header>
+
+<main class="band" id="appMain" hidden><div class="wrap">
+<section id="v-viajes">
+  <div class="filters">
+    <label>Mostrar<select id="qEst"><option value="activos">Pendientes, autorizados y en ruta</option><option value="todos">Todos</option><option value="finalizado">Finalizados</option><option value="rechazado">Rechazados / cancelados</option></select></label>
+    <label>Mes<input id="qMes" type="month"></label>
+    <label>Vendedor<select id="qVen"></select></label>
+  </div>
+  <div id="lista"></div>
+</section>
+
+<section id="v-autorizar" hidden>
+  <p class="meta" id="aNota"></p>
+  <h2>Pendientes de autorizar</h2><div id="aPen"></div>
+  <h2 style="margin-top:28px">Resueltas recientemente</h2><div id="aRes"></div>
+</section>
+
+<section id="v-checklist" hidden>
+  <p class="meta" id="kNota"></p>
+  <div id="kBlq"></div>
+  <h2>Para entregar</h2><div id="kEnt"></div>
+  <h2 style="margin-top:28px">En ruta · para recibir</h2><div id="kDev"></div>
+  <div class="card" style="margin-top:28px"><h2>Historial de checklists</h2>
+    <div class="scroll"><table class="stack"><thead><tr><th>Fecha</th><th>Conductor</th><th>Entrega</th><th>Devolución</th><th class="n">Km recorridos</th><th>Combustible al volver</th><th>Novedades</th></tr></thead><tbody id="kHis"></tbody></table></div></div>
+</section>
+
+<section id="v-pedir" hidden>
+  <div class="card">
+    <h2 id="pTitle">Pedir el vehículo</h2>
+    <p class="meta" id="pAnt"></p>
+    <form id="fp" autocomplete="off">
+      <div class="grid">
+        <label>Fecha del viaje<input id="pFecha" type="date" required></label>
+        <label>Hora de salida estimada<input id="pHi" type="time" required></label>
+        <label>Hora de regreso estimada<input id="pHf" type="time" required></label>
+        <label>Conductor<select id="pCond" required></select></label>
+      </div>
+      <p class="msg" id="pCondMsg"></p>
+      <label style="margin-top:10px">Acompañantes</label>
+      <div class="chks" id="pAcomp"></div>
+      <label style="margin-top:10px">Otros acompañantes (no vendedores)<input id="pOtros" placeholder="Nombre y apellido, separados por coma"></label>
+      <h3>Visitas previstas</h3>
+      <div id="pVisitas"></div>
+      <div class="row" style="margin-top:8px"><button type="button" class="sm" id="pAddV">+ Agregar visita</button></div>
+      <label style="margin-top:12px">Comentarios para quien autoriza<textarea id="pObs"></textarea></label>
+      <div class="row"><button class="pri" type="submit" id="pSave">Enviar pedido</button><button type="button" id="pCancel" hidden>Cancelar edición</button><span class="msg" id="pMsg"></span></div>
+    </form>
+  </div>
+</section>
+
+<section id="v-vendedores" hidden>
+  <div class="card">
+    <h2>Vendedores y carnets</h2><p class="meta" id="vNota"></p>
+    <div class="scroll"><table class="stack"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Mail</th><th>Carnet</th><th>Categoría</th><th>Vence</th><th>Estado</th><th>Foto carnet</th><th></th></tr></thead><tbody id="tVen"></tbody></table></div>
+    <div class="row"><button class="pri" id="vAdd" type="button">+ Agregar vendedor</button><span class="msg" id="vMsg"></span></div>
+  </div>
+</section>
+
+<section id="v-vehiculo" hidden>
+  <div class="card"><h2>Estado de la unidad</h2><div id="vehEst" style="display:grid;gap:6px"></div></div>
+  <div class="card">
+    <h2>Datos del vehículo</h2>
+    <form id="fc"><div class="grid">
+      <label>Patente<input id="cPat" placeholder="AB123CD"></label>
+      <label>Marca y modelo<input id="cMod"></label>
+      <label>Compañía de seguro<input id="cSegC"></label>
+      <label>N.º de póliza<input id="cSegP"></label>
+      <label>Vencimiento del seguro<input id="cSegV" type="date"></label>
+      <label>Vencimiento de la VTV<input id="cVtv" type="date"></label>
+      <label>Cambio de aceite cada (km)<input id="cAcK" type="number" min="0" step="500"></label>
+      <label>o cada (meses)<input id="cAcM" type="number" min="0" step="1"></label>
+      <label>Anticipación mínima de pedidos (horas)<input id="cAnt" type="number" min="0" step="1"></label>
+      <label class="full">Administración: quiénes autorizan viajes y hacen los checklists<input id="cAut" placeholder="Nombres separados por coma"></label>
+    </div><div class="row"><button class="pri" type="submit">Guardar</button><span class="msg" id="cMsg"></span></div></form>
+  </div>
+  <div class="card">
+    <h2>Historial de mantenimiento</h2>
+    <div class="scroll"><table class="stack"><thead><tr><th>Fecha</th><th>Tipo</th><th class="n">Km</th><th>Taller</th><th class="n">Costo</th><th>Detalle</th><th></th></tr></thead><tbody id="tMan"></tbody></table></div>
+    <div class="row"><button class="pri" id="mAdd" type="button">+ Registrar mantenimiento</button></div>
+  </div>
+</section>
+
+<section id="v-usuarios" hidden>
+  <div class="card">
+    <h2>Usuarios</h2>
+    <p class="meta">Acá ves a todos: los habilitados en la app y los creados en Supabase. <b>Bloquear</b> corta el acceso al instante y cierra sus sesiones; se puede deshacer con Desbloquear.</p>
+    <div class="scroll"><table class="stack"><thead><tr><th>Nombre</th><th>Mail</th><th>Rol</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody id="tUsr"></tbody></table></div>
+    <div class="row"><button class="pri" id="uAdd" type="button">+ Agregar administrador</button><button id="uRec" type="button">Actualizar lista</button><span class="msg" id="uMsg"></span></div>
+    <details style="margin-top:14px"><summary>¿Cómo doy de alta a alguien?</summary>
+      <ol class="meta"><li>Habilitá su mail en la app: vendedores en la pestaña <b>Vendedores</b>; administradores con <b>+ Agregar administrador</b>.</li>
+      <li>En Supabase: <b>Authentication → Users → Add user → Create new user</b>, con el mismo mail, una contraseña provisoria y <b>Auto Confirm User</b> tildado.</li>
+      <li>La primera vez que entra, la app le pide elegir su propia contraseña.</li></ol></details>
+  </div>
+</section>
+
+<section id="v-resumen" hidden>
+  <div class="card">
+    <div class="filters"><label>Mes<input id="rMes" type="month"></label></div>
+    <div class="kpis" id="rKpi"></div>
+    <h3>Por vendedor</h3>
+    <div class="scroll"><table class="stack"><thead><tr><th>Vendedor</th><th class="n">Viajes manejando</th><th class="n">Viajes acompañando</th><th class="n">Km manejados</th><th class="n">Visitas</th><th class="n">Concretadas</th><th class="n">Efectividad</th></tr></thead><tbody id="rVen"></tbody></table></div>
+    <h3>Visitas del mes</h3>
+    <div class="scroll"><table class="stack"><thead><tr><th>Fecha</th><th>Tipo</th><th>Nombre</th><th>Lugar</th><th class="n">Potenciales</th><th>Vendedor</th><th>Resultado</th></tr></thead><tbody id="rVis"></tbody></table></div>
+    <div class="row"><button id="rCsv" type="button">Copiar viajes del mes como CSV</button><span class="msg" id="rCsvMsg">Para pegar en Excel o Google Sheets.</span></div>
+  </div>
+</section>
+</div></main>
+
+<div class="dlg" id="dlg"><div class="card"><h2 id="dT"></h2><form id="df"><div id="dB"></div>
+  <div class="row"><button class="pri" type="submit" id="dOk">Guardar</button><button type="button" id="dNo">Cancelar</button><span class="msg" id="dM"></span></div></form></div></div>
+
+<script>
+{
+/* ===== CONFIGURACIÓN: pegar acá los datos de tu proyecto Supabase (Project Settings → API) ===== */
+const SUPABASE_URL="PEGAR_PROJECT_URL";
+const SUPABASE_KEY="PEGAR_ANON_PUBLIC_KEY";
+/* ============================================================================================== */
+const MOTIVO_V=["Posible afiliación","Seguimiento","Firma de documentación","Otro"];
+const RES=["Pendiente","Afiliación concretada","No concretada","Volver a visitar"];
+const COMB=["Lleno","3/4","1/2","1/4","Reserva"];
+const EST={pendiente:["Pendiente de autorización","t-wrn"],autorizado:["Autorizado","t-ok"],enruta:["En ruta","t-wrn"],finalizado:["Finalizado",""],rechazado:["Rechazado","t-bad"],cancelado:["Cancelado",""]};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const opt=(v,t,sel)=>`<option value="${esc(v)}"${sel?" selected":""}>${esc(t??v)}</option>`;
+const pad=n=>String(n).padStart(2,"0");
+const hoy=()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())};
+const ahora=()=>{const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())};
+const fmtF=f=>f?f.split("-").reverse().join("/"):"";
+const dias=(a,b)=>Math.round((new Date(b+"T00:00")-new Date(a+"T00:00"))/864e5);
+const nf=new Intl.NumberFormat("es-AR");
+const uid=()=>crypto.randomUUID();
+let V=[],T=[],M=[],A={},K={},AC=[],U=[],C={patente:"",modelo:"",autorizadores:[],anticipacion:24},cVen=null,cVia=null,cCfg=null,cAut=null,cChk=null,cMan=null,assets=null,puedeAdmin=false,editId=null,sb=null,yo=null;
+const ven=id=>V.find(v=>v.id===id);
+const nom=id=>id?(ven(id)?.nombre||"(vendedor borrado)"):"elegí conductor primero";
+
+function carnet(v,f){f=f||hoy();if(!v||!v.carnet)return{ok:false,k:"sin",t:"Sin carnet",c:"t-bad"};
+  if(!v.vence)return{ok:false,k:"sf",t:"Falta vencimiento",c:"t-wrn"};
+  const d=dias(f,v.vence);if(d<0)return{ok:false,k:"venc",t:"Vencido",c:"t-bad"};
+  if(d<=30)return{ok:true,k:"pv",t:"Vence en "+d+" día"+(d===1?"":"s"),c:"t-wrn"};return{ok:true,k:"ok",t:"Vigente",c:"t-ok"}}
+const miembros=t=>[t.conductorId,...(t.acomp||[])].filter(Boolean);
+
+/* ---------- pestañas ---------- */
+function ruta(){const h=(location.hash||"#viajes").slice(1);const t=["viajes","pedir","autorizar","checklist","vendedores","vehiculo","resumen","usuarios"].includes(h)?h:"viajes";
+  for(const s of["viajes","pedir","autorizar","checklist","vendedores","vehiculo","resumen","usuarios"])$("v-"+s).hidden=s!==t;
+  for(const a of document.querySelectorAll("#tabs a"))a.classList.toggle("on",a.dataset.t===t)}
+addEventListener("hashchange",ruta);
+
+/* ---------- diálogo genérico ---------- */
+let dSave=null;
+function dlg(t,html,onSave,okTxt){$("dT").textContent=t;$("dB").innerHTML=html;$("dM").textContent="";$("dOk").textContent=okTxt||"Guardar";dSave=onSave;$("dlg").classList.add("on");const f=$("dB").querySelector("input,select,textarea");if(f)f.focus()}
+const cerrar=()=>$("dlg").classList.remove("on");
+$("dNo").addEventListener("click",cerrar);
+$("df").addEventListener("submit",async e=>{e.preventDefault();if(!dSave)return;$("dOk").disabled=true;
+  try{const r=await dSave();if(r){$("dM").textContent=r;$("dM").className="msg err"}else cerrar()}
+  catch(err){$("dM").textContent=err?.message||"No se pudo guardar.";$("dM").className="msg err"}
+  $("dOk").disabled=false});
+const val=id=>$(id)?.value??"";
+const numv=id=>{const v=val(id);return v===""?null:Number(v)};
+
+/* ---------- pedido ---------- */
+function visitaHtml(v,i,parts){v=v||{};return`<div class="visita" data-i="${i}"><div class="grid">
+  <label>Tipo<select class="vTipo">${["Empresa","Persona"].map(x=>opt(x,x,v.tipo===x)).join("")}</select></label>
+  <label>Nombre (empresa o persona)<input class="vNom" required value="${esc(v.nombre)}"></label>
+  <label>Dirección / localidad<input class="vLug" value="${esc(v.lugar)}"></label>
+  <label>Contacto<input class="vCon" value="${esc(v.contacto)}" placeholder="Teléfono o persona"></label>
+  <label>Personas a afiliar (estimado)<input class="vPot" type="number" min="1" step="1" value="${esc(v.potenciales??"")}"></label>
+  <label>Motivo<select class="vMot">${MOTIVO_V.map(x=>opt(x,x,v.motivo===x)).join("")}</select></label>
+  <label>Vendedor a cargo<select class="vVen">${parts.map(id=>opt(id,nom(id),v.vendId===id)).join("")}</select></label>
+  </div><div class="row" style="margin-top:8px"><button type="button" class="sm del" data-rm="${i}">Quitar visita</button></div></div>`}
+function leerVisitas(){return[...$("pVisitas").querySelectorAll(".visita")].map(d=>({tipo:d.querySelector(".vTipo").value,nombre:d.querySelector(".vNom").value.trim(),lugar:d.querySelector(".vLug").value.trim(),contacto:d.querySelector(".vCon").value.trim(),potenciales:d.querySelector(".vPot").value?Number(d.querySelector(".vPot").value):null,motivo:d.querySelector(".vMot").value,vendId:d.querySelector(".vVen").value,resultado:"Pendiente",nota:""}))}
+function partsForm(){return[val("pCond"),...[...$("pAcomp").querySelectorAll("input:checked")].map(x=>x.value)].filter(Boolean)}
+function pintarVisitas(list){const p=partsForm();$("pVisitas").innerHTML=list.map((v,i)=>visitaHtml(v,i,p.length?p:[""])).join("")}
+function refrescarParts(){const vs=leerVisitas().map((v,i)=>v);pintarVisitas(vs)}
+function pintarCond(sel,acSel){const f=val("pFecha")||hoy();
+  $("pCond").innerHTML=opt("","Elegí quién maneja")+V.filter(v=>v.activo!==false).map(v=>{const c=carnet(v,f);return`<option value="${esc(v.id)}"${c.ok?"":" disabled"}${sel===v.id?" selected":""}>${esc(v.nombre)}${c.ok?"":" — "+esc(c.t)}</option>`}).join("");
+  const cond=val("pCond");const c=carnet(ven(cond),f);
+  $("pCondMsg").textContent=cond&&c.k==="pv"?"Atención: el carnet de "+nom(cond)+" "+c.t.toLowerCase()+".":"";$("pCondMsg").className="msg wrn";
+  const prev=acSel||[...$("pAcomp").querySelectorAll("input:checked")].map(x=>x.value);
+  $("pAcomp").innerHTML=V.filter(v=>v.activo!==false&&v.id!==cond).map(v=>`<label class="chk"><input type="checkbox" value="${esc(v.id)}"${prev.includes(v.id)?" checked":""}>${esc(v.nombre)}</label>`).join("")||'<span class="msg">Administración tiene que cargar los vendedores.</span>'}
+$("pFecha").addEventListener("change",()=>{pintarCond(val("pCond"));refrescarParts()});
+$("pCond").addEventListener("change",()=>{pintarCond(val("pCond"));refrescarParts()});
+$("pAcomp").addEventListener("change",refrescarParts);
+$("pAddV").addEventListener("click",()=>{const l=leerVisitas();l.push({});pintarVisitas(l)});
+$("pVisitas").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;const l=leerVisitas();l.splice(+b.dataset.rm,1);pintarVisitas(l)});
+function resetPedido(){$("fp").reset();editId=null;$("pFecha").value=hoy();$("pTitle").textContent="Pedir el vehículo";$("pSave").textContent="Enviar pedido";$("pCancel").hidden=true;
+  try{const c=localStorage.getItem("cv_cond");pintarCond(c||"",[])}catch(e){pintarCond("",[])}pintarVisitas([{}])}
+$("pCancel").addEventListener("click",()=>{resetPedido();$("pMsg").textContent=""});
+function solapa(t,id){return T.find(o=>o.id!==id&&o.fecha===t.fecha&&["pendiente","autorizado","enruta"].includes(estado(o))&&o.hIni<t.hFin&&t.hIni<o.hFin)}
+$("fp").addEventListener("submit",async e=>{e.preventDefault();const m=$("pMsg");m.className="msg err";
+  if(!cVia){m.textContent="Sin conexión a la base: no se pudo enviar.";return}
+  const t={fecha:val("pFecha"),hIni:val("pHi"),hFin:val("pHf"),conductorId:val("pCond"),acomp:[...$("pAcomp").querySelectorAll("input:checked")].map(x=>x.value),acompOtros:val("pOtros").trim(),visitas:leerVisitas(),obs:val("pObs").trim()};
+  if(t.hFin<=t.hIni){m.textContent="La hora de regreso tiene que ser posterior a la de salida.";return}
+  const c=carnet(ven(t.conductorId),t.fecha);if(!c.ok){m.textContent="El conductor no tiene carnet vigente para esa fecha.";return}
+  if(!t.visitas.length){m.textContent="Agregá al menos una visita.";return}
+  const o=solapa(t,editId);if(o){m.textContent="El vehículo ya está pedido ese día de "+o.hIni+" a "+o.hFin+" por "+nom(o.conductorId)+".";return}
+  const horas=(new Date(t.fecha+"T"+t.hIni)-Date.now())/36e5;t.fueraDeTermino=horas<(Number(C.anticipacion)||0);
+  $("pSave").disabled=true;
+  try{const prev=editId?T.find(x=>x.id===editId):null;const id=editId||uid();
+    await cVia.doc(id).set({...(prev?strip(prev):{}),...t,estado:"activo",rev:prev?(prev.rev||0)+1:0,creado:prev?.creado||Date.now(),autorizadoPor:"",motivoRechazo:""});
+    try{localStorage.setItem("cv_cond",t.conductorId)}catch(e){}
+    resetPedido();m.className="msg";m.textContent=(t.fueraDeTermino?"Pedido enviado, pero con menos anticipación de la pedida ("+C.anticipacion+" h). ":"Pedido enviado. ")+"Queda pendiente de autorización.";location.hash="#viajes"}
+  catch(err){m.textContent=err?.message||"No se pudo enviar."}
+  $("pSave").disabled=false});
+const strip=o=>{const{id,...r}=o;return r};
+
+/* ---------- estado derivado ---------- */
+// viajes: los escribe cualquier vendedor. autorizaciones y checklists: solo administración (regla de la base).
+function estado(t){if(t.estado==="cancelado")return"cancelado";const k=K[t.id];
+  if(k?.devolucion||t.regreso)return"finalizado";if(k?.entrega||t.salida)return"enruta";
+  const a=A[t.id];if(a&&(a.rev||0)===(t.rev||0))return a.decision;
+  if(!a&&["autorizado","rechazado"].includes(t.estado))return t.estado;return"pendiente"}
+const kmIni=t=>K[t.id]?.entrega?.km??t.salida?.km;
+const kmFin=t=>K[t.id]?.devolucion?.km??t.regreso?.km;
+function kmDe(t){const a=kmIni(t),b=kmFin(t);return a!=null&&b!=null?Math.max(0,b-a):0}
+
+/* ---------- checklist ---------- */
+const ITEMS=[["doc","Documentación (cédula, seguro, VTV)"],["mat","Matafuego y balizas"],["aux","Rueda de auxilio y crique"],["luz","Luces y señaleros"],["cub","Cubiertas en buen estado"],["lim","Limpieza interior"],["car","Carrocería sin daños nuevos"],["lla","Llaves y documentación entregadas"]];
+function ckHtml(tipo,t,prev){const km=tipo==="entrega"?ultimoKm():"";const minK=tipo==="devolucion"?(kmIni(t)??0):0;
+  return`<p class="meta">${tipo==="entrega"?"Revisá la unidad antes de entregarla a":"Revisá la unidad al recibirla de"} <b>${esc(nom(t.conductorId))}</b>.</p>
+  <div class="grid"><label>Hora<input id="xH" type="time" required value="${ahora()}"></label>
+  <label>Km del tablero<input id="xK" type="number" min="${esc(minK)}" step="1" inputmode="numeric" required value="${esc(km)}"></label>
+  <label>Combustible<select id="xF">${COMB.map(x=>opt(x)).join("")}</select></label>
+  <label>Responsable<select id="xR" required>${opt("","Elegí")}${(C.autorizadores||[]).map(a=>opt(a)).join("")}</select></label></div>
+  <div class="cklist">${ITEMS.map(([k,l])=>`<label class="chk"><input type="checkbox" id="ck_${k}" checked>${esc(l)}</label>`).join("")}</div>
+  <label>Novedades o daños<textarea id="xO" placeholder="Obligatorio si destildaste algún punto"></textarea></label>
+  ${assets?`<label style="margin-top:10px">Fotos (opcional)<input id="xFo" type="file" accept="image/*" multiple></label>`:""}
+  ${tipo==="entrega"&&prev?`<p class="meta">Al salir tenía ${nf.format(prev.km)} km.</p>`:""}`}
+async function subir(id,carpeta){const f=$(id)?.files;if(!f||!f.length||!assets)return[];const out=[];
+  for(const file of f){out.push(await assets.upload(file,carpeta||"otros"))}return out}
+async function ckLeer(t,tipo){const km=numv("xK");if(!val("xR"))return["Elegí el responsable."];
+  if(tipo==="devolucion"&&kmIni(t)!=null&&km<kmIni(t))return["El km no puede ser menor que el de la entrega ("+nf.format(kmIni(t))+")."];
+  const items={};let falla=false;for(const[k]of ITEMS){items[k]=$("ck_"+k).checked;if(!items[k])falla=true}
+  if(falla&&!val("xO").trim())return["Describí la novedad de los puntos destildados."];
+  $("dM").className="msg";$("dM").textContent="Guardando…";const fotos=await subir("xFo","checklists");
+  return[null,{h:val("xH"),km,comb:val("xF"),resp:val("xR"),items,novedad:val("xO").trim(),fotos,fecha:hoy(),ts:Date.now()}]}
+function ckResumen(c,tit){if(!c)return"";const mal=ITEMS.filter(([k])=>c.items&&c.items[k]===false).map(([,l])=>l);
+  return`<div class="ck"><b>${tit}</b> ${esc(c.h)} · ${nf.format(c.km)} km · Combustible ${esc(c.comb)} · ${esc(c.resp)}${mal.length||c.novedad?` · <span class="tag t-bad">Novedad</span> ${esc(mal.join(", "))}${c.novedad?" — "+esc(c.novedad):""}`:' · <span class="tag t-ok">Todo OK</span>'}${fotosHtml(c.fotos)}</div>`}
+const fotosHtml=ids=>(ids||[]).map(p=>` <a class="fl" data-p="${esc(p)}" href="#" target="_blank" rel="noopener"><img class="th" data-p="${esc(p)}" alt="Foto"></a>`).join("");
+const mapUrl=l=>l?.lat!=null?`https://www.google.com/maps?q=${Number(l.lat)},${Number(l.lng)}`:(typeof l?.link==="string"&&l.link.startsWith("https://")?l.link:"");
+
+/* ---------- acciones sobre viajes ---------- */
+async function saveV(t,ch){const up={};if("estado"in ch)up.estado=ch.estado;if("obsViaje"in ch)up.obs_viaje=nz(ch.obsViaje);
+  if(Object.keys(up).length)await q(sb.from("viajes").update(up).eq("id",t.id));
+  if(ch.visitas)for(const[i,v]of ch.visitas.entries())if(v.id){const r=visRow(v,t.id,i);delete r.viaje_id;await q(sb.from("visitas").update(r).eq("id",v.id))}
+  refrescar()}
+function ultimoKm(){let best=null,ts=-1;for(const t of T){const k=K[t.id]?.devolucion;const km=k?.km??t.regreso?.km;const s=k?.ts??t.regreso?.ts??0;if(km!=null&&s>ts){ts=s;best=km}}return best??""}
+const soloAdmin=()=>{dlg("Solo administración","<p>Esta acción la hace administración (usuarios con permiso de Editor).</p>",async()=>{},"Entendido")};
+const acc={
+ aut(t){if(!puedeAdmin)return soloAdmin();dlg("Autorizar viaje",`<p>${esc(fmtF(t.fecha))}, ${esc(t.hIni)} a ${esc(t.hFin)} · ${esc(nom(t.conductorId))}</p><label>Autoriza<select id="xA" required>${opt("","Elegí")}${(C.autorizadores||[]).map(a=>opt(a)).join("")}</select></label><label style="margin-top:10px">Comentario<textarea id="xC"></textarea></label>`,
+   async()=>{if(!val("xA"))return"Elegí quién autoriza.";await cAut.doc(t.id).set({decision:"autorizado",por:val("xA"),comentario:val("xC").trim(),rev:t.rev||0,ts:Date.now()})},"Autorizar")},
+ rech(t){if(!puedeAdmin)return soloAdmin();dlg("Rechazar pedido",`<label>Quién rechaza<select id="xA" required>${opt("","Elegí")}${(C.autorizadores||[]).map(a=>opt(a)).join("")}</select></label><label style="margin-top:10px">Motivo<textarea id="xC" required></textarea></label>`,
+   async()=>{if(!val("xA"))return"Elegí quién rechaza.";await cAut.doc(t.id).set({decision:"rechazado",por:val("xA"),comentario:val("xC").trim(),rev:t.rev||0,ts:Date.now()})},"Rechazar")},
+ canc(t){dlg("Cancelar viaje","<p>El viaje queda cancelado y el horario se libera.</p>",async()=>{await saveV(t,{estado:"cancelado"})},"Sí, cancelar")},
+ edit(t){editId=t.id;$("pFecha").value=t.fecha;$("pHi").value=t.hIni;$("pHf").value=t.hFin;pintarCond(t.conductorId,t.acomp||[]);$("pOtros").value=t.acompOtros||"";$("pObs").value=t.obs||"";pintarVisitas(t.visitas||[]);
+   $("pTitle").textContent="Editar pedido";$("pSave").textContent="Reenviar pedido";$("pCancel").hidden=false;$("pMsg").className="msg wrn";$("pMsg").textContent="Al reenviarlo vuelve a quedar pendiente de autorización.";location.hash="#pedir"},
+ ent(t){if(!puedeAdmin)return soloAdmin();const c=carnet(ven(t.conductorId),hoy());
+   if(!c.ok){dlg("No se puede entregar",`<p>${esc(nom(t.conductorId))}: ${esc(c.t)}. Actualizá el carnet en Vendedores o que editen el pedido con otro conductor.</p>`,async()=>{},"Entendido");return}
+   const bl=vehEstado().filter(x=>x.bloquea);if(bl.length){dlg("No se puede entregar","<p>"+esc(bl.map(x=>x.t).join(" · "))+". Actualizalo en la pestaña Vehículo.</p>",async()=>{},"Entendido");return}
+   if(T.some(o=>estado(o)==="enruta")){dlg("Vehículo en uso","<p>Hay otro viaje en ruta. Hacé primero el checklist de devolución de ese viaje.</p>",async()=>{},"Entendido");return}
+   dlg("Checklist de entrega",ckHtml("entrega",t),async()=>{const[e,d]=await ckLeer(t,"entrega");if(e)return e;await cChk.doc(t.id).set({entrega:d})},"Entregar unidad")},
+ dev(t){if(!puedeAdmin)return soloAdmin();dlg("Checklist de devolución",ckHtml("devolucion",t),async()=>{const[e,d]=await ckLeer(t,"devolucion");if(e)return e;await cChk.doc(t.id).set({...(K[t.id]?strip(K[t.id]):{}),devolucion:d})},"Recibir unidad")},
+ lleg(t,i){const v=t.visitas[i];dlg("Llegada a "+v.nombre,`<div class="grid"><label>Hora de llegada<input id="xH" type="time" required value="${ahora()}"></label></div>
+   <p class="msg" id="xGeo">Buscando tu ubicación…</p><input type="hidden" id="xLat"><input type="hidden" id="xLng"><input type="hidden" id="xAcc">
+   <label>Link de ubicación de Google Maps<input id="xL" inputmode="url" placeholder="https://maps.app.goo.gl/…"></label>
+   <p class="meta">Si la ubicación automática no funciona: en Google Maps tocá el punto azul → Compartir ubicación → Copiar, y pegalo acá.</p>
+   ${assets?`<label style="margin-top:6px">Foto del lugar (opcional)<input id="xFo" type="file" accept="image/*" capture="environment"></label>`:""}`,
+   async()=>{const lat=val("xLat"),link=val("xL").trim();if(!lat&&!link)return"Falta la ubicación: pegá el link de Google Maps.";
+     if(link&&!link.startsWith("https://"))return"El link tiene que empezar con https://";
+     $("dM").className="msg";$("dM").textContent="Guardando…";const fotos=await subir("xFo","visitas");
+     const vs=t.visitas.map((x,j)=>j===i?{...x,llegada:{h:val("xH"),ts:Date.now(),lat:lat?Number(lat):null,lng:lat?Number(val("xLng")):null,prec:val("xAcc")?Number(val("xAcc")):null,link,fotos}}:x);
+     await saveV(t,{visitas:vs})},"Marcar llegada");
+   const g=$("xGeo");try{if(!navigator.geolocation)throw 0;navigator.geolocation.getCurrentPosition(p=>{if(!$("xLat"))return;$("xLat").value=p.coords.latitude;$("xLng").value=p.coords.longitude;$("xAcc").value=Math.round(p.coords.accuracy);g.className="msg";g.textContent="Ubicación tomada (precisión "+Math.round(p.coords.accuracy)+" m)."},
+     ()=>{g.className="msg wrn";g.textContent="No se pudo tomar la ubicación automática. Pegá el link de Google Maps."},{enableHighAccuracy:true,timeout:8000})}catch(e){g.className="msg wrn";g.textContent="No se pudo tomar la ubicación automática. Pegá el link de Google Maps."}},
+ res(t){dlg("Resultado de las visitas",resHtml(t)+`<label style="margin-top:10px">Observaciones del viaje<textarea id="xO">${esc(t.obsViaje)}</textarea></label>`,async()=>{await saveV(t,{visitas:leerRes(t),obsViaje:val("xO").trim()})})}
+};
+function resHtml(t){return(t.visitas||[]).map((v,i)=>`<div class="visita"><strong>${esc(v.tipo)}: ${esc(v.nombre)}</strong><div class="grid" style="margin-top:6px"><label>Resultado<select id="xR${i}">${RES.map(x=>opt(x,x,v.resultado===x)).join("")}</select></label><label>Afiliados logrados<input id="xP${i}" type="number" min="0" step="1" value="${esc(v.afiliados??"")}"></label><label class="full">Nota<input id="xN${i}" value="${esc(v.nota)}"></label></div></div>`).join("")}
+function leerRes(t){return(t.visitas||[]).map((v,i)=>({...v,resultado:val("xR"+i),afiliados:numv("xP"+i),nota:val("xN"+i).trim()}))}
+document.querySelector("main").addEventListener("click",e=>{const b=e.target.closest("button[data-a]");if(!b)return;const t=T.find(x=>x.id===b.dataset.id);if(t&&acc[b.dataset.a])acc[b.dataset.a](t,Number(b.dataset.i))});
+
+/* ---------- vendedores ---------- */
+function venForm(v){v=v||{};dlg(v.id?"Editar vendedor":"Agregar vendedor",`<div class="grid">
+  <label class="full">Nombre y apellido<input id="xN" required value="${esc(v.nombre)}"></label>
+  <label>Teléfono<input id="xT" value="${esc(v.tel)}"></label>
+  <label>Mail (para entrar a la app)<input id="xE" type="email" value="${esc(v.email)}"></label>
+  <label>¿Tiene carnet de conducir?<select id="xC">${opt("si","Sí",v.carnet)}${opt("no","No",v.id&&!v.carnet)}</select></label>
+  <label>Categoría<input id="xK" value="${esc(v.cat??"B1")}" placeholder="B1"></label>
+  <label>Vencimiento del carnet<input id="xV" type="date" value="${esc(v.vence)}"></label>
+  <label>Estado<select id="xA">${opt("si","Activo",v.activo!==false)}${opt("no","Inactivo",v.activo===false)}</select></label></div>
+  ${assets?`<label style="margin-top:10px">Foto del carnet (frente y dorso)${v.fotos?.length?" · al elegir nuevas se reemplazan las actuales":""}<input id="xFo" type="file" accept="image/*" multiple></label><div>${fotosHtml(v.fotos)}</div>`:'<p class="meta">Las fotos del carnet solo las carga administración.</p>'}`,
+  async()=>{const c=val("xC")==="si";if(c&&!val("xV"))return"Cargá la fecha de vencimiento del carnet.";
+    $("dM").className="msg";$("dM").textContent="Guardando…";const nuevas=await subir("xFo","carnets");
+    const fotos=nuevas.length?nuevas:(v.fotos||[]);
+    await cVen.doc(v.id||uid("p")).set({nombre:val("xN").trim(),tel:val("xT").trim(),email:val("xE").trim(),carnet:c,cat:c?val("xK").trim():"",vence:c?val("xV"):"",activo:val("xA")==="si",fotos});
+    if(nuevas.length)for(const id of v.fotos||[])try{await assets.delete(id)}catch(e){}})}
+$("vAdd").addEventListener("click",()=>!cVen?($("vMsg").textContent="Sin conexión a la base."):puedeAdmin?venForm():soloAdmin());
+$("tVen").addEventListener("click",e=>{const b=e.target.closest("button[data-v]");if(!b)return;const v=ven(b.dataset.id);if(!v)return;if(!puedeAdmin)return soloAdmin();
+  if(b.dataset.v==="ed")venForm(v);else dlg("¿Borrar a "+v.nombre+"?","<p>Los viajes ya cargados lo conservan, pero aparece como vendedor borrado. Si dejó de trabajar, mejor marcalo como Inactivo.</p>",async()=>{await cVen.doc(v.id).delete()},"Borrar")});
+$("fc").addEventListener("submit",async e=>{e.preventDefault();if(!cCfg)return;if(!puedeAdmin){$("cMsg").textContent="Solo administración puede cambiar esto.";return}
+  try{$("cMsg").textContent="Guardando…";await cCfg.doc("general").set({patente:val("cPat").trim().toUpperCase(),modelo:val("cMod").trim(),seguroCia:val("cSegC").trim(),seguroPoliza:val("cSegP").trim(),seguroVence:val("cSegV"),vtvVence:val("cVtv"),aceiteKm:Number(val("cAcK"))||10000,aceiteMeses:Number(val("cAcM"))||12,anticipacion:Number(val("cAnt"))||0,autorizadores:val("cAut").split(",").map(s=>s.trim()).filter(Boolean)});$("cMsg").textContent="Guardado."}
+  catch(err){$("cMsg").textContent=err?.message||"No se pudo guardar."}});
+
+/* ---------- render ---------- */
+function tripHtml(t){const st=estado(t);const[et,ec]=EST[st]||[st,""];const km=kmDe(t);const au=A[t.id];const k=K[t.id]||{};
+  const ac=[...(t.acomp||[]).map(nom),...(t.acompOtros?t.acompOtros.split(",").map(s=>s.trim()).filter(Boolean):[])];
+  const btn=(a,txt,cls,i)=>`<button class="sm ${cls||""}" data-a="${a}" data-id="${esc(t.id)}"${i!=null?` data-i="${i}"`:""}>${txt}</button>`;
+  let b="";
+  if(st==="pendiente")b=(puedeAdmin?btn("aut","Autorizar","ok")+btn("rech","Rechazar","del"):"")+btn("edit","Editar")+btn("canc","Cancelar");
+  else if(st==="rechazado")b=btn("edit","Corregir y reenviar");
+  else if(st==="autorizado")b=(vehEstado().some(x=>x.bloquea)?'<span class="tag t-bad">Salida bloqueada: mantenimiento incompleto o vencido</span> ':"")+(puedeAdmin?btn("ent","Checklist de entrega","pri"):'<span class="msg">Esperando que administración entregue la unidad.</span>')+btn("canc","Cancelar");
+  else if(st==="enruta")b=(puedeAdmin?btn("dev","Checklist de devolución","pri"):"")+btn("res","Cargar resultados");
+  else if(st==="finalizado")b=btn("res","Cargar resultados");
+  const cc=carnet(ven(t.conductorId),t.fecha);
+  const auTxt=au&&(au.rev||0)===(t.rev||0)?(au.decision==="rechazado"?"Rechazó: ":"Autorizó: ")+esc(au.por)+(au.comentario?" ("+esc(au.comentario)+")":"")+" · ":t.autorizadoPor?"Autorizó: "+esc(t.autorizadoPor)+" · ":"";
+  return`<article class="trip ${esc(st)}"><div class="hd"><strong>${esc(fmtF(t.fecha))} · ${esc(t.hIni)}–${esc(t.hFin)}</strong><span class="tag ${ec}">${esc(et)}</span>${t.fueraDeTermino?'<span class="tag t-wrn">Pedido con poca anticipación</span>':""}${["pendiente","autorizado"].includes(st)&&!cc.ok?`<span class="tag t-bad">Carnet: ${esc(cc.t)}</span>`:""}</div>
+  <div>Conductor: <b>${esc(nom(t.conductorId))}</b>${ac.length?" · Acompañan: "+esc(ac.join(", ")):""}</div>
+  <ul>${(t.visitas||[]).map((v,i)=>{const L=v.llegada,mu=mapUrl(L);return`<li>${esc(v.tipo)}: <b>${esc(v.nombre)}</b>${v.lugar?" ("+esc(v.lugar)+")":""}${v.potenciales?" · "+esc(v.potenciales)+" potenciales":""} · ${esc(v.motivo)} · a cargo de ${esc(nom(v.vendId))}
+    ${L?` · <span class="tag t-ok">Llegó ${esc(L.h)}</span>${mu?` <a href="${esc(mu)}" target="_blank" rel="noopener">Ver ubicación</a>`:""}${fotosHtml(L.fotos)}`:st==="enruta"?" "+btn("lleg","Llegué","pri",i):""}
+    ${v.resultado&&v.resultado!=="Pendiente"||st==="finalizado"?` — <span class="tag ${v.resultado==="Afiliación concretada"?"t-ok":v.resultado==="No concretada"?"t-bad":""}">${esc(v.resultado)}${v.afiliados?" · "+esc(v.afiliados):""}</span>`:""}</li>`}).join("")}</ul>
+  <div class="meta">${t.obs?"Comentario: "+esc(t.obs)+" · ":""}${auTxt}${!k.entrega&&t.salida?"Salió "+esc(t.salida.h)+" con "+nf.format(t.salida.km)+" km":""}${!k.devolucion&&t.regreso?" · Volvió "+esc(t.regreso.h):""}${km?" · "+nf.format(km)+" km recorridos":""}${t.obsViaje?" · "+esc(t.obsViaje):""}</div>
+  ${ckResumen(k.entrega,"Entrega:")}${ckResumen(k.devolucion,"Devolución:")}
+  <div class="row" style="margin-top:10px">${b}</div></article>`}
+
+function render(){
+  const mes=hoy().slice(0,7);
+  $("gPat").textContent=C.patente?"· "+C.patente:"";
+  const er=T.find(t=>estado(t)==="enruta");
+  const prox=T.filter(t=>estado(t)==="autorizado"&&t.fecha>=hoy()).sort((a,b)=>(a.fecha+a.hIni).localeCompare(b.fecha+b.hIni))[0];
+  const ult=Object.values(K).map(k=>k.devolucion).filter(Boolean).sort((a,b)=>b.ts-a.ts)[0];
+  const nov=ult&&(ult.novedad||Object.values(ult.items||{}).includes(false));
+  const blq=vehEstado().some(x=>x.bloquea);$("gVehE").textContent=er?"En ruta":blq?"Bloqueado":"Disponible";$("gVeh").classList.toggle("warn",!!nov||blq);
+  $("gVehD").textContent=(er?nom(er.conductorId)+" · salió "+(K[er.id]?.entrega?.h||er.salida?.h||""):prox?"Próximo: "+fmtF(prox.fecha)+" "+prox.hIni+" · "+nom(prox.conductorId):"Sin viajes autorizados")+(nov?" · Última devolución con novedad":"")+(blq&&!er?" · Falta mantenimiento o hay vencimientos":"");
+  const pen=T.filter(t=>estado(t)==="pendiente");$("gPenN").textContent=pen.length;$("gPen").classList.toggle("warn",pen.length>0);
+  $("gPenD").textContent=pen.length?"El más próximo: "+fmtF(pen.map(t=>t.fecha).sort()[0]):"Nada pendiente";
+  $("bPen").hidden=!pen.length;$("bPen").textContent=pen.length;
+  const vm=T.filter(t=>t.fecha?.startsWith(mes)&&estado(t)==="finalizado").flatMap(t=>t.visitas||[]);
+  const con=vm.filter(v=>v.resultado==="Afiliación concretada");
+  $("gAfi").textContent=con.length;$("gAfiD").textContent="de "+vm.length+" visita"+(vm.length===1?"":"s")+" realizadas";
+  const al=V.filter(v=>v.activo!==false&&v.carnet&&["venc","pv","sf"].includes(carnet(v).k)).map(v=>v.nombre.split(" ")[0]+": carnet "+carnet(v).t.toLowerCase());
+  const vh=vehEstado().filter(e=>e.n!=="ok").map(e=>e.t);const tot=[...vh,...al];
+  $("gCarN").textContent=tot.length;$("gCar").classList.toggle("warn",tot.length>0);
+  $("gCarD").textContent=tot.length?tot.join(" · "):"Vehículo y carnets al día";
+  $("pAnt").textContent="Pedilo con al menos "+(C.anticipacion||0)+" h de anticipación. El viaje queda pendiente hasta que lo autorice "+((C.autorizadores||[]).join(" o ")||"administración (configuralo en Vehículo)")+".";
+  $("vNota").textContent=puedeAdmin?"Las fotos del carnet solo las ve administración. Para que un vendedor entre: cargale el mail acá y creale el usuario en Supabase con una contraseña provisoria.":"Solo administración puede agregar o modificar vendedores.";
+  $("vAdd").hidden=!puedeAdmin;
+
+  const sv=$("qVen"),cur=sv.value;sv.innerHTML=opt("","Todos")+V.map(v=>opt(v.id,v.nombre)).join("");sv.value=V.some(v=>v.id===cur)?cur:"";
+  const e=$("qEst").value,m=$("qMes").value,q=sv.value;
+  const ord={enruta:0,pendiente:1,autorizado:2,rechazado:3};
+  const L=T.filter(t=>{const st=estado(t);return(e==="todos"||(e==="activos"?["pendiente","autorizado","enruta"].includes(st):e==="rechazado"?["rechazado","cancelado"].includes(st):st===e))&&(e==="activos"||!m||t.fecha?.startsWith(m))&&(!q||miembros(t).includes(q))})
+   .sort((a,b)=>e==="activos"?((ord[estado(a)]-ord[estado(b)])||(a.fecha+a.hIni).localeCompare(b.fecha+b.hIni)):(b.fecha+b.hIni).localeCompare(a.fecha+a.hIni));
+  $("qMes").disabled=e==="activos";
+  $("lista").innerHTML=L.length?L.map(tripHtml).join(""):`<div class="card empty">${T.length?"No hay viajes con este filtro.":V.length?'Todavía no hay viajes. Usá “Pedir vehículo” para cargar el primero.':'Empezá cargando los vendedores y sus carnets en la pestaña “Vendedores”.'}</div>`;
+
+  $("tVen").innerHTML=V.length?[...V].sort((a,b)=>a.nombre.localeCompare(b.nombre,"es")).map(v=>{const c=carnet(v);return`<tr${v.activo===false?' style="opacity:.55"':""}><td>${esc(v.nombre)}${v.activo===false?" (inactivo)":""}</td><td>${esc(v.tel)}</td><td>${v.email?esc(v.email):'<span class="msg">Sin acceso</span>'}</td><td>${v.carnet?"Sí":"No"}</td><td>${esc(v.cat)}</td><td style="white-space:nowrap">${esc(fmtF(v.vence))}</td><td><span class="tag ${c.c}">${esc(c.t)}</span></td><td>${fotosHtml(v.fotos)||(v.carnet?'<span class="msg">Falta</span>':"")}</td><td style="white-space:nowrap">${puedeAdmin?`<button class="sm" data-v="ed" data-id="${esc(v.id)}">Editar</button> <button class="sm del" data-v="del" data-id="${esc(v.id)}">Borrar</button>`:""}</td></tr>`}).join(""):`<tr><td colspan="9" class="empty">Todavía no hay vendedores cargados.</td></tr>`;
+  renderVeh();renderAdm();renderUsr();
+  if(!editId&&document.activeElement?.closest?.("#fp")==null)pintarCond(val("pCond"));
+  resumen()}
+
+function renderUsr(){$("tabUsr").hidden=!puedeAdmin;if(!puedeAdmin)return;
+  const fd=t=>t?new Date(t).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"}):"";
+  $("tUsr").innerHTML=U.length?U.map(u=>{let est,cls;
+    if(!u.habilitado){est="Sin habilitar en la app";cls="t-wrn"}
+    else if(u.bloqueado){est="Bloqueado";cls="t-bad"}
+    else if(!u.tiene_usuario){est="Falta crear el usuario en Supabase";cls="t-wrn"}
+    else{est=u.clave_propia?"Activo":"Activo · contraseña provisoria";cls="t-ok"}
+    const yoMismo=u.email===yo?.email,e=esc(u.email),acts=[];
+    if(!yoMismo&&(u.habilitado||u.tiene_usuario))acts.push(u.bloqueado?`<button class="sm ok" data-u="desb" data-e="${e}">Desbloquear</button>`:`<button class="sm del" data-u="bloq" data-e="${e}">Bloquear</button>`);
+    if(!yoMismo&&u.habilitado&&!u.bloqueado)acts.push(u.rol==="admin"?`<button class="sm" data-u="noadm" data-e="${e}">Quitar administración</button>`:`<button class="sm" data-u="adm" data-e="${e}">Hacer administrador</button>`);
+    return`<tr${u.bloqueado?' style="opacity:.6"':""}><td>${esc(u.nombre||"—")}</td><td>${e}</td><td>${u.rol==="admin"?"Administración":u.rol==="vendedor"?"Vendedor":"—"}</td><td><span class="tag ${cls}">${esc(est)}</span></td><td style="white-space:nowrap">${u.ultimo_ingreso?esc(fd(u.ultimo_ingreso)):'<span class="msg">Nunca</span>'}</td><td style="white-space:nowrap">${yoMismo?'<span class="msg">Vos</span>':acts.join(" ")}</td></tr>`}).join("")
+    :`<tr><td colspan="6" class="empty">Sin usuarios.</td></tr>`}
+$("uRec").addEventListener("click",()=>{$("uMsg").textContent="";refrescar()});
+$("tUsr").addEventListener("click",e=>{const b=e.target.closest("button[data-u]");if(!b)return;const u=U.find(x=>x.email===b.dataset.e);if(!u)return;
+  const quien=esc(u.nombre||u.email),a=b.dataset.u;
+  const admActivos=U.filter(x=>x.rol==="admin"&&x.habilitado&&!x.bloqueado).length;
+  if(a==="bloq")dlg("¿Bloquear a "+(u.nombre||u.email)+"?",`<p>${quien} no va a poder entrar a la app ni ver datos. Si la tiene abierta, se le corta al instante. Sus viajes y registros quedan guardados.</p>`,
+    async()=>{await q(sb.rpc("bloquear_usuario",{p_email:u.email,p_bloquear:true}));refrescar()},"Bloquear");
+  else if(a==="desb")dlg("¿Desbloquear a "+(u.nombre||u.email)+"?",`<p>${quien} va a poder volver a entrar con su contraseña.</p>`,
+    async()=>{await q(sb.rpc("bloquear_usuario",{p_email:u.email,p_bloquear:false}));refrescar()},"Desbloquear");
+  else if(a==="adm")dlg("¿Hacer administrador a "+(u.nombre||u.email)+"?","<p>Va a poder autorizar viajes, hacer checklists, cargar vendedores, mantenimiento y bloquear usuarios.</p>",
+    async()=>{await q(sb.from("accesos").update({rol:"admin"}).eq("email",u.email));refrescar()},"Hacer administrador");
+  else if(a==="noadm"){if(admActivos<=1){dlg("No se puede","<p>Tiene que quedar al menos un administrador activo.</p>",async()=>{},"Entendido");return}
+    dlg("¿Quitar administración a "+(u.nombre||u.email)+"?",u.vendedor_id?"<p>Sigue entrando como vendedor.</p>":"<p>No es vendedor, así que ya no va a poder entrar a la app.</p>",
+    async()=>{if(u.vendedor_id)await q(sb.from("accesos").update({rol:"vendedor"}).eq("email",u.email));else await q(sb.from("accesos").delete().eq("email",u.email));refrescar()},"Quitar")}});
+$("uAdd").addEventListener("click",()=>dlg("Agregar administrador",`<div class="grid"><label>Nombre<input id="xN" required></label><label>Mail<input id="xE" type="email" required></label></div><p class="meta">Después creale el usuario en Supabase (Authentication → Users → Add user) con este mail, una contraseña provisoria y Auto Confirm User tildado.</p>`,
+  async()=>{const e=val("xE").trim().toLowerCase();if(!e)return"Falta el mail.";const prev=AC.find(a=>a.email===e);
+    await q(sb.from("accesos").upsert({email:e,rol:"admin",nombre:val("xN").trim(),vendedor_id:prev?.vendedor_id||null}));refrescar()},"Agregar"));
+
+function resumen(){const m=$("rMes").value;const F=T.filter(t=>estado(t)==="finalizado"&&t.fecha?.startsWith(m));
+  const vis=F.flatMap(t=>(t.visitas||[]).map(v=>({...v,fecha:t.fecha})));const con=vis.filter(v=>v.resultado==="Afiliación concretada");
+  const km=F.reduce((s,t)=>s+kmDe(t),0),afi=con.reduce((s,v)=>s+(v.afiliados||0),0);
+  const pct=(a,b)=>b?Math.round(a/b*100)+"%":"—";
+  $("rKpi").innerHTML=[["Viajes realizados",F.length],["Km recorridos",nf.format(km)],["Visitas",vis.length],["Con llegada marcada",vis.filter(v=>v.llegada).length],["Empresas / personas",vis.filter(v=>v.tipo==="Empresa").length+" / "+vis.filter(v=>v.tipo==="Persona").length],["Ventas concretadas",con.length],["Afiliados logrados",afi],["Efectividad",pct(con.length,vis.length)]].map(([a,b])=>`<div>${esc(a)}<b>${esc(b)}</b></div>`).join("");
+  const rows=V.map(v=>{const dr=F.filter(t=>t.conductorId===v.id),ac=F.filter(t=>(t.acomp||[]).includes(v.id)),vv=vis.filter(x=>x.vendId===v.id),cc=vv.filter(x=>x.resultado==="Afiliación concretada");
+    return{n:v.nombre,d:dr.length,a:ac.length,k:dr.reduce((s,t)=>s+kmDe(t),0),v:vv.length,c:cc.length}}).filter(r=>r.d||r.a||r.v).sort((a,b)=>b.c-a.c||b.v-a.v);
+  $("rVen").innerHTML=rows.length?rows.map(r=>`<tr><td>${esc(r.n)}</td><td class="n">${r.d}</td><td class="n">${r.a}</td><td class="n">${nf.format(r.k)}</td><td class="n">${r.v}</td><td class="n">${r.c}</td><td class="n">${pct(r.c,r.v)}</td></tr>`).join(""):`<tr><td colspan="7" class="empty">Sin viajes finalizados en este mes.</td></tr>`;
+  $("rVis").innerHTML=vis.length?vis.sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(v=>{const mu=mapUrl(v.llegada);return`<tr><td>${esc(fmtF(v.fecha))}</td><td>${esc(v.tipo)}</td><td>${esc(v.nombre)}</td><td>${esc(v.lugar)}${mu?` · <a href="${esc(mu)}" target="_blank" rel="noopener">mapa</a>`:""}</td><td class="n">${esc(v.potenciales??"")}</td><td>${esc(nom(v.vendId))}</td><td>${esc(v.resultado)}${v.afiliados?" ("+esc(v.afiliados)+")":""}</td></tr>`}).join(""):`<tr><td colspan="7" class="empty">Sin visitas en este mes.</td></tr>`}
+
+$("rCsv").addEventListener("click",async()=>{const m=$("rMes").value;const q=v=>{v=String(v??"");return/[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const h=["Fecha","Estado","Conductor","Acompañantes","Autorizó","Entrega","Devolución","Km entrega","Km devolución","Km recorridos","Novedad devolución","Tipo","Visita","Lugar","Vendedor","Llegada","Ubicación","Resultado","Afiliados"];
+  const out=[h.join(";")];for(const t of T.filter(t=>t.fecha?.startsWith(m)).sort((a,b)=>a.fecha.localeCompare(b.fecha))){const k=K[t.id]||{};const au=A[t.id];
+    for(const v of(t.visitas?.length?t.visitas:[{}]))
+    out.push([fmtF(t.fecha),EST[estado(t)]?.[0],nom(t.conductorId),[...(t.acomp||[]).map(nom),t.acompOtros].filter(Boolean).join(", "),au?.por||t.autorizadoPor,k.entrega?.h??t.salida?.h,k.devolucion?.h??t.regreso?.h,kmIni(t),kmFin(t),kmFin(t)!=null?kmDe(t):"",k.devolucion?.novedad,v.tipo,v.nombre,v.lugar,v.vendId?nom(v.vendId):"",v.llegada?.h,mapUrl(v.llegada),v.resultado,v.afiliados].map(q).join(";"))}
+  try{await navigator.clipboard.writeText(out.join("\n"));$("rCsvMsg").textContent="Copiado."}catch(e){$("rCsvMsg").textContent="El navegador no permitió copiar."}});
+
+
+/* ---------- pestañas de administración ---------- */
+const vacio=t=>`<div class="card empty">${t}</div>`;
+const fh=t=>(t.fecha||"")+(t.hIni||"");
+function renderAdm(){const nota=puedeAdmin?"":"Solo administración puede autorizar y hacer los checklists. Acá podés ver el estado.";$("aNota").textContent=nota;$("kNota").textContent=nota;
+  const pen=T.filter(t=>estado(t)==="pendiente").sort((a,b)=>fh(a).localeCompare(fh(b)));
+  $("aPen").innerHTML=pen.length?pen.map(tripHtml).join(""):vacio("No hay pedidos esperando autorización.");
+  const res=T.filter(t=>["autorizado","rechazado"].includes(estado(t))||(A[t.id]&&["enruta","finalizado"].includes(estado(t)))).sort((a,b)=>(A[b.id]?.ts||0)-(A[a.id]?.ts||0)).slice(0,10);
+  $("aRes").innerHTML=res.length?res.map(tripHtml).join(""):vacio("Todavía no se resolvió ningún pedido.");
+  const bl=vehEstado().filter(x=>x.bloquea);
+  $("kBlq").innerHTML=bl.length?`<div class="card" style="border-color:var(--red)"><b>Salidas bloqueadas:</b> ${esc(bl.map(x=>x.t).join(" · "))}. Completalo en la pestaña Vehículo.</div>`:"";
+  const ent=T.filter(t=>estado(t)==="autorizado").sort((a,b)=>fh(a).localeCompare(fh(b)));
+  const dev=T.filter(t=>estado(t)==="enruta");
+  $("kEnt").innerHTML=ent.length?ent.map(tripHtml).join(""):vacio("No hay viajes autorizados esperando la entrega de la unidad.");
+  $("kDev").innerHTML=dev.length?dev.map(tripHtml).join(""):vacio("La unidad no está en ruta.");
+  $("bChk").hidden=!(ent.length+dev.length);$("bChk").textContent=ent.length+dev.length;
+  const his=T.filter(t=>K[t.id]?.entrega).sort((a,b)=>(K[b.id].entrega.ts||0)-(K[a.id].entrega.ts||0));
+  const nv=c=>{if(!c)return"";const mal=ITEMS.filter(([k])=>c.items&&c.items[k]===false).map(([,l])=>l);return[...mal,c.novedad].filter(Boolean).join(" · ")};
+  $("kHis").innerHTML=his.length?his.map(t=>{const k=K[t.id],n=[nv(k.entrega)&&"Entrega: "+nv(k.entrega),nv(k.devolucion)&&"Devolución: "+nv(k.devolucion)].filter(Boolean).join(" | ");
+    return`<tr><td style="white-space:nowrap">${esc(fmtF(t.fecha))}</td><td>${esc(nom(t.conductorId))}</td><td style="white-space:nowrap">${esc(k.entrega.h)} · ${nf.format(k.entrega.km)} km · ${esc(k.entrega.resp)}</td><td style="white-space:nowrap">${k.devolucion?esc(k.devolucion.h)+" · "+nf.format(k.devolucion.km)+" km · "+esc(k.devolucion.resp):'<span class="tag t-wrn">En ruta</span>'}</td><td class="n">${k.devolucion?nf.format(kmDe(t)):""}</td><td>${esc(k.devolucion?.comb)}</td><td>${n?'<span class="tag t-bad">Novedad</span> '+esc(n):'<span class="tag t-ok">OK</span>'}${fotosHtml([...(k.entrega.fotos||[]),...(k.devolucion?.fotos||[])])}</td></tr>`}).join(""):`<tr><td colspan="7" class="empty">Todavía no hay checklists.</td></tr>`}
+
+/* ---------- vehículo y mantenimiento ---------- */
+const TIPOS_M=["Cambio de aceite","Service","Cubiertas","Frenos","Batería","Reparación","VTV","Seguro","Otro"];
+function kmActual(){let k=Number(ultimoKm())||0;for(const t of T){const e=K[t.id]?.entrega?.km;if(e>k)k=e}for(const m of M)if(m.km>k)k=m.km;return k}
+function ultAceite(){return M.filter(m=>m.tipo==="Cambio de aceite").sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""))[0]}
+function proxAceite(){const u=ultAceite();if(!u)return null;const ck=Number(C.aceiteKm)||10000,cm=Number(C.aceiteMeses)||12;
+  const d=new Date(u.fecha+"T00:00");d.setMonth(d.getMonth()+cm);const f=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  return{km:(u.km||0)+ck,fecha:f}}
+function venc(f,nombre){if(!f)return{n:"bad",t:nombre+": falta cargar el vencimiento",bloquea:true};const d=dias(hoy(),f);
+  if(d<0)return{n:"bad",t:nombre+" vencido el "+fmtF(f),bloquea:true};if(d<=30)return{n:"wrn",t:nombre+" vence en "+d+" día"+(d===1?"":"s")};return{n:"ok",t:nombre+" vigente hasta "+fmtF(f)}}
+function vehEstado(){const out=[venc(C.seguroVence,"Seguro"),venc(C.vtvVence,"VTV")];
+  const p=proxAceite(),ka=kmActual();
+  if(!p)out.push({n:"bad",t:"Aceite: falta cargar el último cambio en el historial",bloquea:true});
+  else{const fk=p.km-ka,fd=dias(hoy(),p.fecha);
+    out.push(fk<=0||fd<0?{n:"bad",bloquea:true,t:"Cambio de aceite vencido ("+(fk<=0?nf.format(-fk)+" km pasados":"desde "+fmtF(p.fecha))+")"}:fk<=1000||fd<=30?{n:"wrn",t:"Cambio de aceite próximo: faltan "+nf.format(fk)+" km o hasta "+fmtF(p.fecha)}:{n:"ok",t:"Aceite: próximo a los "+nf.format(p.km)+" km o el "+fmtF(p.fecha)})}
+  return out}
+function renderVeh(){const es=vehEstado();
+  const bl=es.filter(e=>e.bloquea);
+  $("vehEst").innerHTML=(bl.length?`<div class="msg err"><b>Salidas bloqueadas</b> hasta completar o renovar lo marcado en rojo.</div>`:`<div class="msg"><b>Unidad habilitada para salir.</b></div>`)+es.map(e=>`<div><span class="tag ${e.n==="ok"?"t-ok":e.n==="bad"?"t-bad":"t-wrn"}">${e.n==="ok"?"OK":e.n==="bad"?"Vencido":"Atención"}</span> ${esc(e.t)}</div>`).join("")+`<div class="meta">Km actual registrado: ${nf.format(kmActual())}</div>`;
+  if(document.activeElement?.closest?.("#fc")==null){$("cPat").value=C.patente||"";$("cMod").value=C.modelo||"";$("cAnt").value=C.anticipacion??24;$("cAut").value=(C.autorizadores||[]).join(", ");
+    $("cSegC").value=C.seguroCia||"";$("cSegP").value=C.seguroPoliza||"";$("cSegV").value=C.seguroVence||"";$("cVtv").value=C.vtvVence||"";$("cAcK").value=C.aceiteKm??10000;$("cAcM").value=C.aceiteMeses??12}
+  for(const el of $("fc").querySelectorAll("input,button"))el.disabled=!puedeAdmin;$("mAdd").hidden=!puedeAdmin;
+  const L=[...M].sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||""));
+  $("tMan").innerHTML=L.length?L.map(m=>`<tr><td style="white-space:nowrap">${esc(fmtF(m.fecha))}</td><td>${esc(m.tipo)}</td><td class="n">${m.km!=null?nf.format(m.km):""}</td><td>${esc(m.taller)}</td><td class="n">${m.costo!=null?"$ "+nf.format(m.costo):""}</td><td>${esc(m.notas)}${fotosHtml(m.fotos)}</td><td style="white-space:nowrap">${puedeAdmin?`<button class="sm" data-m="ed" data-id="${esc(m.id)}">Editar</button> <button class="sm del" data-m="del" data-id="${esc(m.id)}">Borrar</button>`:""}</td></tr>`).join(""):`<tr><td colspan="7" class="empty">Sin registros. Empezá cargando el último cambio de aceite.</td></tr>`}
+function manForm(m){m=m||{};dlg(m.id?"Editar registro":"Registrar mantenimiento",`<div class="grid">
+  <label>Fecha<input id="xD" type="date" required value="${esc(m.fecha||hoy())}"></label>
+  <label>Tipo<select id="xT">${TIPOS_M.map(x=>opt(x,x,m.tipo===x)).join("")}</select></label>
+  <label>Km<input id="xK" type="number" min="0" step="1" inputmode="numeric" value="${esc(m.km??kmActual())}"></label>
+  <label>Taller / proveedor<input id="xL" value="${esc(m.taller)}"></label>
+  <label>Costo ($)<input id="xC" type="number" min="0" step="0.01" value="${esc(m.costo??"")}"></label>
+  <label class="full">Detalle<textarea id="xO">${esc(m.notas)}</textarea></label></div>
+  <p class="meta">Si registrás una VTV o un seguro nuevo, actualizá también su vencimiento en los datos del vehículo.</p>
+  ${assets?`<label>Comprobante o fotos (opcional)<input id="xFo" type="file" accept="image/*,application/pdf" multiple></label><div>${fotosHtml(m.fotos)}</div>`:""}`,
+  async()=>{$("dM").className="msg";$("dM").textContent="Guardando…";const nu=await subir("xFo","mantenimiento");
+    await cMan.doc(m.id||uid("m")).set({fecha:val("xD"),tipo:val("xT"),km:numv("xK"),taller:val("xL").trim(),costo:numv("xC"),notas:val("xO").trim(),fotos:nu.length?nu:(m.fotos||[])})})}
+$("mAdd").addEventListener("click",()=>cMan?(puedeAdmin?manForm():soloAdmin()):null);
+$("tMan").addEventListener("click",e=>{const b=e.target.closest("button[data-m]");if(!b)return;const m=M.find(x=>x.id===b.dataset.id);if(!m)return;
+  if(b.dataset.m==="ed")manForm(m);else dlg("¿Borrar este registro?",`<p>${esc(fmtF(m.fecha))} · ${esc(m.tipo)}</p>`,async()=>{await cMan.doc(m.id).delete()},"Borrar")});
+for(const id of["qEst","qMes","qVen"])$(id).addEventListener("input",render);
+$("rMes").addEventListener("input",resumen);
+$("qMes").value=hoy().slice(0,7);$("rMes").value=hoy().slice(0,7);
+ruta();resetPedido();render();
+/* ---------- conexión con Supabase ---------- */
+const q=async p=>{const{data,error}=await p;if(error)throw new Error(traducir(error.message));return data};
+function traducir(m){m=String(m||"");
+  if(/row-level security/i.test(m))return"No tenés permiso para hacer esto.";
+  if(/Invalid login credentials/i.test(m))return"Mail o contraseña incorrectos.";
+  if(/Email not confirmed/i.test(m))return"Todavía no confirmaste tu mail. Revisá tu correo (también en spam).";
+  if(/User already registered/i.test(m))return"Ese mail ya tiene contraseña. Ingresá o usá “Olvidé mi contraseña”.";
+  if(/Password should be at least/i.test(m))return"La contraseña tiene que tener al menos 6 caracteres.";
+  if(/rate limit/i.test(m))return"Demasiados intentos. Esperá unos minutos.";
+  if(/Failed to fetch|NetworkError/i.test(m))return"Sin conexión. Revisá internet e intentá de nuevo.";
+  return m}
+let rt=null;const refrescar=()=>{clearTimeout(rt);rt=setTimeout(()=>cargar().catch(e=>{$("estado").textContent=e.message}),150)};
+const hm=x=>x?String(x).slice(0,5):"";
+const nz=v=>v===""||v==null?null:v;
+
+async function cargar(){
+  const[v,c,m,vi,vs,a,k,ac]=await Promise.all([
+    q(sb.from("vendedores").select("*")),q(sb.from("config").select("*").eq("id",1)),q(sb.from("mantenimiento").select("*")),
+    q(sb.from("viajes").select("*")),q(sb.from("visitas").select("*").order("orden")),q(sb.from("autorizaciones").select("*")),
+    q(sb.from("checklists").select("*")),q(sb.from("accesos").select("*"))]);
+  V=v.map(r=>({id:r.id,nombre:r.nombre,tel:r.tel||"",email:r.email||"",carnet:r.carnet,cat:r.categoria||"",vence:r.vence||"",activo:r.activo,fotos:r.fotos||[]}));
+  const g=c[0]||{};
+  C={patente:g.patente||"",modelo:g.modelo||"",seguroCia:g.seguro_cia||"",seguroPoliza:g.seguro_poliza||"",seguroVence:g.seguro_vence||"",vtvVence:g.vtv_vence||"",aceiteKm:g.aceite_km??10000,aceiteMeses:g.aceite_meses??12,anticipacion:g.anticipacion??24,autorizadores:g.autorizadores||[]};
+  M=m.map(r=>({id:r.id,fecha:r.fecha,tipo:r.tipo,km:r.km,taller:r.taller||"",costo:r.costo!=null?Number(r.costo):null,notas:r.notas||"",fotos:r.fotos||[]}));
+  const vp={};for(const r of vs)(vp[r.viaje_id]=vp[r.viaje_id]||[]).push({id:r.id,tipo:r.tipo,nombre:r.nombre,lugar:r.lugar||"",contacto:r.contacto||"",potenciales:r.potenciales,motivo:r.motivo||"",vendId:r.vendedor_id||"",resultado:r.resultado,afiliados:r.afiliados,nota:r.nota||"",
+    llegada:r.llegada_ts?{h:hm(r.llegada_h),ts:Date.parse(r.llegada_ts),lat:r.lat,lng:r.lng,prec:r.precision_m,link:r.link||"",fotos:r.fotos||[]}:null});
+  T=vi.map(r=>({id:r.id,fecha:r.fecha,hIni:hm(r.h_ini),hFin:hm(r.h_fin),conductorId:r.conductor_id,acomp:r.acomp||[],acompOtros:r.acomp_otros||"",obs:r.obs||"",obsViaje:r.obs_viaje||"",estado:r.estado,rev:r.rev,fueraDeTermino:r.fuera_de_termino,creado:Date.parse(r.creado),visitas:vp[r.id]||[]}));
+  A={};for(const r of a)A[r.viaje_id]={decision:r.decision,por:r.por,comentario:r.comentario||"",rev:r.rev,ts:Date.parse(r.ts)};
+  K={};for(const r of k)(K[r.viaje_id]=K[r.viaje_id]||{})[r.tipo]={h:hm(r.h),km:r.km,comb:r.comb||"",resp:r.resp,items:r.items||{},novedad:r.novedad||"",fotos:r.fotos||[],ts:Date.parse(r.ts)};
+  AC=ac;const mio=ac.find(x=>x.email===yo.email);
+  if(!mio||mio.bloqueado){await sb.auth.signOut();location.reload();return}
+  puedeAdmin=mio.rol==="admin";
+  U=puedeAdmin?await q(sb.rpc("listar_usuarios")).catch(()=>[]):[];
+  $("estado").textContent="Actualizado "+ahora()+" · "+(puedeAdmin?"Administración":"Vendedor");
+  render()}
+
+const visRow=(v,viajeId,i)=>({viaje_id:viajeId,orden:i,tipo:v.tipo,nombre:v.nombre,lugar:nz(v.lugar),contacto:nz(v.contacto),potenciales:v.potenciales??null,motivo:nz(v.motivo),vendedor_id:nz(v.vendId),resultado:v.resultado||"Pendiente",afiliados:v.afiliados??null,nota:nz(v.nota),
+  llegada_h:v.llegada?.h||null,llegada_ts:v.llegada?new Date(v.llegada.ts).toISOString():null,lat:v.llegada?.lat??null,lng:v.llegada?.lng??null,precision_m:v.llegada?.prec??null,link:nz(v.llegada?.link),fotos:v.llegada?.fotos||[]});
+
+// Adaptadores: misma forma de uso que antes (coleccion.doc(id).set / delete), ahora contra Supabase
+cVia={doc:id=>({set:async t=>{
+  const row={fecha:t.fecha,h_ini:t.hIni,h_fin:t.hFin,conductor_id:t.conductorId,acomp:t.acomp||[],acomp_otros:nz(t.acompOtros),obs:nz(t.obs),estado:"activo",fuera_de_termino:!!t.fueraDeTermino};
+  if(T.some(x=>x.id===id)){await q(sb.from("viajes").update(row).eq("id",id));await q(sb.from("visitas").delete().eq("viaje_id",id))}
+  else await q(sb.from("viajes").insert({id,...row}));
+  if(t.visitas?.length)await q(sb.from("visitas").insert(t.visitas.map((v,i)=>visRow(v,id,i))));
+  refrescar()}})};
+cAut={doc:id=>({set:async d=>{await q(sb.from("autorizaciones").upsert({viaje_id:id,decision:d.decision,por:d.por,comentario:nz(d.comentario),rev:d.rev,ts:new Date().toISOString(),usuario:yo.id}));refrescar()}})};
+cChk={doc:id=>({set:async d=>{for(const tipo of["entrega","devolucion"]){const c=d[tipo];if(!c||K[id]?.[tipo])continue;
+  await q(sb.from("checklists").insert({viaje_id:id,tipo,h:c.h,km:c.km,comb:c.comb,resp:c.resp,items:c.items,novedad:nz(c.novedad),fotos:c.fotos||[],usuario:yo.id}))}refrescar()}})};
+cVen={doc:id=>({set:async v=>{await q(sb.from("vendedores").upsert({id,nombre:v.nombre,tel:nz(v.tel),email:nz(v.email),carnet:v.carnet,categoria:nz(v.cat),vence:nz(v.vence),activo:v.activo,fotos:v.fotos||[]}));refrescar()},
+  delete:async()=>{await q(sb.from("vendedores").delete().eq("id",id));refrescar()}})};
+cCfg={doc:()=>({set:async c=>{await q(sb.from("config").update({patente:nz(c.patente),modelo:nz(c.modelo),seguro_cia:nz(c.seguroCia),seguro_poliza:nz(c.seguroPoliza),seguro_vence:nz(c.seguroVence),vtv_vence:nz(c.vtvVence),aceite_km:c.aceiteKm,aceite_meses:c.aceiteMeses,anticipacion:c.anticipacion,autorizadores:c.autorizadores}).eq("id",1));refrescar()}})};
+cMan={doc:id=>({set:async m=>{await q(sb.from("mantenimiento").upsert({id,fecha:m.fecha,tipo:m.tipo,km:m.km,taller:nz(m.taller),costo:m.costo,notas:nz(m.notas),fotos:m.fotos||[]}));refrescar()},
+  delete:async()=>{await q(sb.from("mantenimiento").delete().eq("id",id));refrescar()}})};
+assets={upload:async(file,carpeta)=>{const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=carpeta+"/"+uid()+"."+ext;await q(sb.storage.from("fotos").upload(path,file,{contentType:file.type||undefined}));return path},
+  delete:async p=>{await sb.storage.from("fotos").remove([p])}};
+
+// Fotos privadas: se muestran con links firmados que duran 1 hora
+const urls={};let hid=null;
+async function hidratar(){const els=[...document.querySelectorAll("[data-p]")].filter(e=>!e.dataset.ok);if(!els.length||!sb)return;
+  const falt=[...new Set(els.map(e=>e.dataset.p))].filter(p=>!urls[p]);
+  if(falt.length){const{data}=await sb.storage.from("fotos").createSignedUrls(falt,3600);for(const r of data||[])if(r.signedUrl)urls[r.path]=r.signedUrl}
+  for(const e of els){const u=urls[e.dataset.p];if(!u)continue;e.dataset.ok=1;if(e.tagName==="IMG")e.src=u;else e.href=u}}
+new MutationObserver(()=>{clearTimeout(hid);hid=setTimeout(hidratar,100)}).observe(document.body,{childList:true,subtree:true});
+
+/* ---------- ingreso ---------- */
+let modo="entrar";
+function modoLogin(m){modo=m;$("lMsg").textContent="";$("lMsg").className="msg";
+  $("lPassW").hidden=m==="olvido";$("lPass").required=m!=="olvido";
+  $("lMail").disabled=m==="nueva";$("lPass").autocomplete=m==="entrar"?"current-password":"new-password";
+  $("lBtn").textContent={entrar:"Ingresar",alta:"Crear contraseña",olvido:"Enviarme un link",nueva:"Guardar nueva contraseña"}[m];
+  $("lLinks").innerHTML=m==="entrar"?'<a href="#" id="lOlv">Olvidé mi contraseña</a>':m==="nueva"?'<a href="#" id="lSal">Salir</a>':'<a href="#" id="lVol">Volver a ingresar</a>';
+  $("lPass2W").hidden=m!=="nueva";$("lPass2").required=m==="nueva"}
+$("lLinks").addEventListener("click",async e=>{const a=e.target.closest("a");if(!a)return;e.preventDefault();if(a.id==="lSal"){await sb.auth.signOut();location.reload();return}modoLogin(a.id==="lOlv"?"olvido":"entrar")});
+$("fl").addEventListener("submit",async e=>{e.preventDefault();const m=$("lMsg"),mail=val("lMail").trim().toLowerCase(),pass=val("lPass");m.className="msg";m.textContent="Un momento…";$("lBtn").disabled=true;
+  const vuelta=location.origin+location.pathname;
+  try{if(modo==="entrar")await q(sb.auth.signInWithPassword({email:mail,password:pass}));
+    else if(modo==="olvido"){await q(sb.auth.resetPasswordForEmail(mail,{redirectTo:vuelta}));m.textContent="Si el mail está registrado, te llega un link para elegir una contraseña nueva.";}
+    else{if(pass!==val("lPass2"))throw new Error("Las dos contraseñas no coinciden.");
+      await q(sb.auth.updateUser({password:pass,data:{clave_propia:true}}));m.textContent="Contraseña guardada.";$("lPass").value="";$("lPass2").value="";modoLogin("entrar");entrar()}}
+  catch(err){m.className="msg err";m.textContent=err.message}
+  $("lBtn").disabled=false});
+$("cambiar").addEventListener("click",()=>dlg("Cambiar contraseña",`<div class="grid"><label>Nueva contraseña<input id="xP1" type="password" minlength="6" autocomplete="new-password" required></label><label>Repetila<input id="xP2" type="password" minlength="6" autocomplete="new-password" required></label></div>`,
+  async()=>{if(val("xP1")!==val("xP2"))return"Las dos contraseñas no coinciden.";await q(sb.auth.updateUser({password:val("xP1"),data:{clave_propia:true}}))},"Guardar"));
+$("salir").addEventListener("click",async()=>{await sb.auth.signOut();location.reload()});
+
+let canal=null,dentro=false;
+async function entrar(){const{data}=await sb.auth.getSession();const s=data?.session;
+  if(!s||(modo==="nueva"&&!dentro)){$("login").hidden=false;$("app").hidden=true;$("appMain").hidden=true;if(!s)return}
+  yo={id:s.user.id,email:(s.user.email||"").toLowerCase()};
+  let mio=null;try{mio=(await q(sb.from("accesos").select("*").eq("email",yo.email)))[0]}catch(e){}
+  if(mio?.bloqueado){$("login").hidden=false;modoLogin("entrar");$("lMsg").className="msg err";$("lMsg").textContent="Tu usuario está bloqueado. Consultá con administración.";await sb.auth.signOut();return}
+  if(!mio){$("login").hidden=false;modoLogin("entrar");$("lMsg").className="msg err";$("lMsg").textContent="El mail "+yo.email+" no está habilitado. Pedile a administración que lo cargue en la app.";await sb.auth.signOut();return}
+  if(!s.user.user_metadata?.clave_propia||modo==="nueva"){modoLogin("nueva");$("lMail").value=yo.email;$("login").hidden=false;$("app").hidden=true;$("appMain").hidden=true;
+    $("lMsg").textContent="Bienvenido/a. Elegí tu contraseña personal para reemplazar la provisoria.";return}
+  if(dentro)return;dentro=true;
+  $("login").hidden=true;$("app").hidden=false;$("appMain").hidden=false;$("usr").textContent=mio.nombre||yo.email;
+  await cargar().catch(e=>{$("estado").textContent=e.message});
+  canal=sb.channel("cambios").on("postgres_changes",{event:"*",schema:"public"},refrescar).subscribe();
+  addEventListener("focus",refrescar)}
+
+if(!window.supabase||SUPABASE_URL.startsWith("PEGAR")){$("lMsg").className="msg err";$("lMsg").textContent=window.supabase?"Falta configurar SUPABASE_URL y SUPABASE_KEY en el archivo.":"No se pudo cargar Supabase. Revisá la conexión.";$("lBtn").disabled=true}
+else{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{flowType:"pkce",persistSession:true,detectSessionInUrl:true}});
+  sb.auth.onAuthStateChange((ev,ses)=>{if(ev==="PASSWORD_RECOVERY"){modoLogin("nueva");$("lMail").value=ses?.user?.email||"";$("login").hidden=false;$("app").hidden=true;$("appMain").hidden=true;$("lMsg").textContent="Elegí tu nueva contraseña."}
+    else if(ev==="SIGNED_IN")setTimeout(entrar,0)});
+  entrar()}
+}
+</script>
+</body>
+</html>
